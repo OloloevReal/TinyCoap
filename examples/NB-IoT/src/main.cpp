@@ -1,5 +1,13 @@
 #include <Arduino.h>
 
+/*
+ESP32 connecte to SIM7020E:
+    GPIO-5  - EN power SIM7020E
+    GPIO-18 - PWR pin SIM7020E
+    GPIO-17 - RX SIM7020E
+    GPIO-16 - TX SIM7020E   
+*/
+
 //#define TINY_GSM_DEBUG Serial
 #define TINY_GSM_MODEM_SIM7020E
 #define LED 2
@@ -10,7 +18,7 @@ TinyCoap tinyCoap;
 #define SerialAT Serial2
 TinyGsm modem(SerialAT);
 
-char host[] = "kopilka.us.to";
+char host[] = "";
 
 void modemOpen(){
     Serial.println(F("Activate external power source"));
