@@ -80,27 +80,6 @@ typedef enum : int8_t {
     COAP_APPLICATION_JSON = 50
 } COAP_CONTENT_TYPE;
 
-class CoapOption {
-    public:
-    uint8_t number;
-    uint8_t length;
-    uint8_t *buffer;
-};
-
-class CoapPacket {
-    public:
-    uint8_t type;
-    uint8_t code;
-    uint8_t *token;
-    uint8_t tokenlen;
-    uint8_t *payload;
-    uint8_t payloadlen;
-    uint16_t messageid;
-    
-    uint8_t optionnum;
-    CoapOption options[MAX_OPTION_NUM];
-};
-
 static const char hexmap1[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
 String hexStr(const char *data, uint16_t len)
@@ -113,31 +92,135 @@ String hexStr(const char *data, uint16_t len)
     return s;
 }
 
+class CoapOption {
+    public:
+    uint8_t number;
+    uint8_t length;
+    uint8_t *buffer;
+};
+
+class CoapPacket {
+public:
+    uint8_t type;
+    uint8_t code;
+    uint8_t *token;
+    uint8_t tokenlen;
+    uint8_t *payload;
+    uint8_t payloadlen;
+    uint16_t messageid;
+    
+    uint8_t optionnum;
+    CoapOption options[MAX_OPTION_NUM];
+public:
+    int ToArray(uint8_t *buffer);
+    String ToHexString();
+};
+
 class Coap {
 public:
-    String get(IPAddress& ip, int port, const char *url){
-        return this->createMsg(ip, port, url, COAP_CON, COAP_GET, NULL, 0, NULL, 0);
+    bool get(IPAddress& ip, int port,  CoapPacket &Packet, const char *url){
+        return this->createMsg(ip, port, Packet, url, COAP_CON, COAP_GET, NULL, 0, NULL, 0);
     }
-    String put(IPAddress& ip, int port, const char *url, char *payload, int payloadlen){
-        return this->createMsg(ip, port, url, COAP_CON, COAP_PUT, NULL, 0, (uint8_t *)payload, strlen(payload));
+    bool put(IPAddress& ip, int port, CoapPacket &Packet, const char *url, char *payload, int payloadlen){
+        return this->createMsg(ip, port, Packet, url, COAP_CON, COAP_PUT, NULL, 0, (uint8_t *)payload, strlen(payload));
     }
-    String post(IPAddress& ip, int port, const char *url, char *payload, int payloadlen, COAP_CONTENT_TYPE payloadtype){
-        return this->createMsg(ip, port, url, COAP_CON, COAP_POST, NULL, 0, (uint8_t *)payload, payloadlen, payloadtype);
+    bool post(IPAddress& ip, int port, CoapPacket &Packet, const char *url, char *payload, int payloadlen, COAP_CONTENT_TYPE payloadtype){
+        return this->createMsg(ip, port, Packet, url, COAP_CON, COAP_POST, NULL, 0, (uint8_t *)payload, payloadlen, payloadtype);
     }
-    String ping(IPAddress& ip, int port){
-        return this->createMsg(ip, port, NULL, COAP_CON, COAP_EMPTY, NULL, 0, NULL, 0);
+    bool ping(IPAddress& ip, int port, CoapPacket &Packet){
+        return this->createMsg(ip, port, Packet, NULL, COAP_CON, COAP_EMPTY, NULL, 0, NULL, 0);
     }
     bool parsePackets(uint8_t *buffer, size_t size, CoapPacket &Packet);
 
 private:
-    String createPacket(CoapPacket &packet, IPAddress &ip, int port);
-    String createMsg(IPAddress &ip, int port, const char *url, 
+    bool createMsg(IPAddress &ip, int port, 
+                    CoapPacket &Packet, 
+                    const char *url,
                     COAP_TYPE type, COAP_METHOD method, 
                     uint8_t *token, uint8_t tokenlen, 
                     uint8_t *payload, uint32_t payloadlen, COAP_CONTENT_TYPE payloadtype = COAP_CONTENT_TYPE::COAP_NONE);
     int parseOption(CoapOption *option, uint16_t *running_delta, uint8_t **buf, size_t buflen);
 };
 
+
+String CoapPacket::ToHexString(){
+    uint8_t buffer[BUF_MAX_SIZE];
+    int len = this->ToArray(buffer);
+    if (len > 0){
+        return hexStr((char *)buffer, len);
+    }
+    return "";
+}
+
+int CoapPacket::ToArray(uint8_t *buffer){
+    uint8_t *p = buffer;
+    uint16_t running_delta = 0;
+    uint16_t packetSize = 0;
+    CoapPacket packet = *this;
+
+    // make coap packet base header
+    *p = 0x01 << 6;
+    *p |= (packet.type & 0x03) << 4;
+    *p++ |= (packet.tokenlen & 0x0F);
+    *p++ = packet.code;
+    *p++ = (packet.messageid >> 8);
+    *p++ = (packet.messageid & 0xFF);
+    p = buffer + COAP_HEADER_SIZE;
+    packetSize += 4;
+
+    // make token
+    if (packet.token != NULL && packet.tokenlen <= 0x0F) {
+        memcpy(p, packet.token, packet.tokenlen);
+        p += packet.tokenlen;
+        packetSize += packet.tokenlen;
+    }
+
+    // make option header
+    for (int i = 0; i < packet.optionnum; i++)  {
+        uint32_t optdelta;
+        uint8_t len, delta;
+
+        if (packetSize + 5 + packet.options[i].length >= BUF_MAX_SIZE) {
+            return -1;
+        }
+        optdelta = packet.options[i].number - running_delta;
+        COAP_OPTION_DELTA(optdelta, &delta);
+        COAP_OPTION_DELTA((uint32_t)packet.options[i].length, &len);
+
+        *p++ = (0xFF & (delta << 4 | len));
+        if (delta == 13) {
+            *p++ = (optdelta - 13);
+            packetSize++;
+        } else if (delta == 14) {
+            *p++ = ((optdelta - 269) >> 8);
+            *p++ = (0xFF & (optdelta - 269));
+            packetSize+=2;
+        } if (len == 13) {
+            *p++ = (packet.options[i].length - 13);
+            packetSize++;
+        } else if (len == 14) {
+            *p++ = (packet.options[i].length >> 8);
+            *p++ = (0xFF & (packet.options[i].length - 269));
+            packetSize+=2;
+        }
+
+        memcpy(p, packet.options[i].buffer, packet.options[i].length);
+        p += packet.options[i].length;
+        packetSize += packet.options[i].length + 1;
+        running_delta = packet.options[i].number;
+    }
+
+    // make payload
+    if (packet.payloadlen > 0) {
+        if ((packetSize + 1 + packet.payloadlen) >= BUF_MAX_SIZE) {
+            return -1;
+        }
+        *p++ = 0xFF;
+        memcpy(p, packet.payload, packet.payloadlen);
+        packetSize += 1 + packet.payloadlen;
+    }
+    return packetSize;
+}
 
 bool Coap::parsePackets(uint8_t *buffer, size_t size, CoapPacket &Packet) {
     if (size < COAP_HEADER_SIZE || (((buffer[0] & 0xC0) >> 6) != 1)) {
@@ -184,77 +267,7 @@ bool Coap::parsePackets(uint8_t *buffer, size_t size, CoapPacket &Packet) {
     return true;
 }
 
-String Coap::createPacket(CoapPacket &packet, IPAddress &ip, int port){
-    uint8_t buffer[BUF_MAX_SIZE];
-    uint8_t *p = buffer;
-    uint16_t running_delta = 0;
-    uint16_t packetSize = 0;
-
-    // make coap packet base header
-    *p = 0x01 << 6;
-    *p |= (packet.type & 0x03) << 4;
-    *p++ |= (packet.tokenlen & 0x0F);
-    *p++ = packet.code;
-    *p++ = (packet.messageid >> 8);
-    *p++ = (packet.messageid & 0xFF);
-    p = buffer + COAP_HEADER_SIZE;
-    packetSize += 4;
-
-    // make token
-    if (packet.token != NULL && packet.tokenlen <= 0x0F) {
-        memcpy(p, packet.token, packet.tokenlen);
-        p += packet.tokenlen;
-        packetSize += packet.tokenlen;
-    }
-
-    // make option header
-    for (int i = 0; i < packet.optionnum; i++)  {
-        uint32_t optdelta;
-        uint8_t len, delta;
-
-        if (packetSize + 5 + packet.options[i].length >= BUF_MAX_SIZE) {
-            return "";
-        }
-        optdelta = packet.options[i].number - running_delta;
-        COAP_OPTION_DELTA(optdelta, &delta);
-        COAP_OPTION_DELTA((uint32_t)packet.options[i].length, &len);
-
-        *p++ = (0xFF & (delta << 4 | len));
-        if (delta == 13) {
-            *p++ = (optdelta - 13);
-            packetSize++;
-        } else if (delta == 14) {
-            *p++ = ((optdelta - 269) >> 8);
-            *p++ = (0xFF & (optdelta - 269));
-            packetSize+=2;
-        } if (len == 13) {
-            *p++ = (packet.options[i].length - 13);
-            packetSize++;
-        } else if (len == 14) {
-            *p++ = (packet.options[i].length >> 8);
-            *p++ = (0xFF & (packet.options[i].length - 269));
-            packetSize+=2;
-        }
-
-        memcpy(p, packet.options[i].buffer, packet.options[i].length);
-        p += packet.options[i].length;
-        packetSize += packet.options[i].length + 1;
-        running_delta = packet.options[i].number;
-    }
-
-    // make payload
-    if (packet.payloadlen > 0) {
-        if ((packetSize + 1 + packet.payloadlen) >= BUF_MAX_SIZE) {
-            return "";
-        }
-        *p++ = 0xFF;
-        memcpy(p, packet.payload, packet.payloadlen);
-        packetSize += 1 + packet.payloadlen;
-    }
-    return hexStr((char*)buffer, packetSize);
-}
-
-String Coap::createMsg(IPAddress &ip, int port, const char *url, COAP_TYPE type, COAP_METHOD method, uint8_t *token, uint8_t tokenlen, uint8_t *payload, uint32_t payloadlen, COAP_CONTENT_TYPE payloadtype){
+bool Coap::createMsg(IPAddress &ip, int port, CoapPacket &Packet, const char *url, COAP_TYPE type, COAP_METHOD method, uint8_t *token, uint8_t tokenlen, uint8_t *payload, uint32_t payloadlen, COAP_CONTENT_TYPE payloadtype){
     // make packet
     CoapPacket packet;
 
@@ -315,8 +328,8 @@ String Coap::createMsg(IPAddress &ip, int port, const char *url, COAP_TYPE type,
         packet.options[packet.optionnum].number = COAP_CONTENT_FORMAT;
         packet.optionnum++;
     }
-
-    return this->createPacket(packet, ip, port);
+    Packet = packet;
+    return true; // this->createPacket(packet, ip, port, Packet);
 }
 
 int Coap::parseOption(CoapOption *option, uint16_t *running_delta, uint8_t **buf, size_t buflen) {

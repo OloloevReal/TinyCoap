@@ -4,12 +4,6 @@
 #include "Arduino.h"
 #include "TinyCoapProto.h"
 
-#ifndef TINY_GSM_USE_HEX
-#define TINY_GSM_USE_HEX
-#endif
-
-#define TINY_GSM_USE_HEX
-#define TINY_GSM_MODEM_SIM7020E
 //#define TINY_GSM_DEBUG Serial
 #include <TinyGsmClient.h>
 
@@ -24,15 +18,14 @@ public:
     TinyCoap()
         :modem(NULL){}
 
-    void begin(const char* auth,
-            TinyGsm&    gsm,
+    void begin(TinyGsm&    gsm,
             const char* apn,
             const char* user,
             const char* pass,
             const char* domain,
             uint16_t    port   = COAP_DEFAULT_PORT){
 
-        config(gsm, auth, domain, port);
+        config(gsm, domain, port);
         unsigned long started = millis();
         while(connectNetwork(apn, user, pass) != true && 
             (millis() - started < COAP_TIMEOUT_MS * 40)){
@@ -54,10 +47,10 @@ public:
 private:
     bool connectNetwork(const char* apn, const char* user, const char* pass);
     void config(TinyGsm&    gsm,
-                const char* auth,
                 const char* domain,
                 uint16_t    port = COAP_DEFAULT_PORT);
-    bool waitResponce();
+    bool waitResponce(){return waitResponce(0);}
+    bool waitResponce(uint16_t messageid);
 
 private:
     const char*         domain;
@@ -66,6 +59,7 @@ private:
     TinyGsm*            modem;
     TinyGsmClientUDP    client;
     Coap                coapMsg;
+    CoapPacket          cp;
     uint8_t             Buffer[COAP_RECEIVE_BUFFER];
 };
 
@@ -108,7 +102,6 @@ bool TinyCoap::connectNetwork(const char* apn, const char* user, const char* pas
 }
 
 void TinyCoap::config(TinyGsm&    gsm,
-                const char* auth,
                 const char* domain,
                 uint16_t    port){
     this->domain = domain;
@@ -118,9 +111,9 @@ void TinyCoap::config(TinyGsm&    gsm,
 }
 
 bool TinyCoap::get(const char *url){
-    String msg = this->coapMsg.get(this->ip, this->port, url);
-    if(client.write(msg.c_str()) > 0){
-        return waitResponce();
+    this->coapMsg.get(this->ip, this->port, this->cp,  url);
+    if(client.write(this->cp.ToHexString().c_str()) > 0){
+        return waitResponce(this->cp.messageid);
     }else{
         DBG(F("Write message failed"));
     }
@@ -128,16 +121,26 @@ bool TinyCoap::get(const char *url){
 }
 
 bool TinyCoap::post(const char *url, char *payload, int payloadlen, COAP_CONTENT_TYPE payloadtype){
-    String msg = this->coapMsg.post(this->ip, this->port, url, payload, payloadlen, payloadtype);
-    if(client.write(msg.c_str()) > 0){
-        return waitResponce();
+    this->coapMsg.post(this->ip, this->port, this->cp, url, payload, payloadlen, payloadtype);
+    if(client.write(this->cp.ToHexString().c_str()) > 0){
+        return waitResponce(this->cp.messageid);
     }else{
         DBG(F("Write message failed"));
     }
     return false;
 }
 
-bool TinyCoap::waitResponce(){
+bool TinyCoap::ping(){
+    this->coapMsg.ping(this->ip, this->port, this->cp);
+    if(client.write(this->cp.ToHexString().c_str()) > 0){
+        return waitResponce();
+    }else{
+        DBG(F("Write message failed"));
+    }
+    return false; 
+}
+
+bool TinyCoap::waitResponce(uint16_t messageid){
     unsigned long started = millis();
     while(client.available() == 0  && (millis() - started < COAP_TIMEOUT_MS * 3)){
         DBG(F("Waiting response ..."));
@@ -156,23 +159,12 @@ bool TinyCoap::waitResponce(){
             DBG(F("Failed to parse received message"));
             return false;
         }
-        return true;
+        if(pkt.messageid == messageid)
+            return true;
+        return false;
     }else{
         DBG(F("Receive timeout exceeded"));
         return false;
     }
 }
-
-bool TinyCoap::ping(){
-    String msg = this->coapMsg.ping(this->ip, this->port);
-    if(client.write(msg.c_str()) > 0){
-        return waitResponce();
-    }else{
-        DBG(F("Write message failed"));
-    }
-    return false;
-    
-}
-
-
 #endif
