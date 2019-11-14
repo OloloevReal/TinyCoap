@@ -12,10 +12,10 @@
 Coap CoapMessage;
 WiFiUDP udp;
 
-char ssid[] = "";
-char pass[] = "";
+char ssid[] = "YOUR WIFI SSID";
+char pass[] = "YOUR WIFI PASS";
 
-char CoAP_Host[] = "192.168.1.2";
+char CoAP_Host[] = "YOUR COAP SERVER";
 uint16_t CoAP_Port = 5683;
 
 void connect_wl(){
@@ -70,7 +70,9 @@ void loop(){
         udp.endPacket();
 
         udp.beginPacket(CoAP_Host, CoAP_Port);
+        ip = udp.remoteIP();
         CoapMessage.get(ip, CoAP_Port, cp, "data/get");
+        cp.SetQueryString("test1=adlajsdljalsd&test3=adlajsdljalsd123123");
         len = cp.ToArray(buffer);
         Serial.printf("Send CoAP message, Code: %d\t MsgID: %d\r\n", cp.code, cp.messageid);
         udp.write(buffer, len);
