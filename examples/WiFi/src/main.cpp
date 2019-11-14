@@ -56,27 +56,42 @@ void setup(){
     }
 }
 
-CoapPacket cp;
-uint8_t buffer[BUF_MAX_SIZE];
+
+uint8_t buffer[BUF_MAX_SIZE] = {0,};
+
+int8_t udp_send(const char *host, uint16_t port, CoapPacket &Packet){
+    udp.beginPacket(host, port);
+    IPAddress ip = udp.remoteIP();
+    int len = Packet.ToArray(buffer);
+    udp.write(buffer, len);
+    return udp.endPacket();
+}
+
+void udp_receive(){
+}
 
 void loop(){
     if(status_wl() == wl_status_t::WL_CONNECTED){    
-        udp.beginPacket(CoAP_Host, CoAP_Port);
-        IPAddress ip = udp.remoteIP();
-        CoapMessage.ping(ip, CoAP_Port, cp);
-        int len = cp.ToArray(buffer);
-        Serial.printf("Send CoAP message, Code: %d\t MsgID: %d\r\n", cp.code, cp.messageid);
-        udp.write(buffer, len);
-        udp.endPacket();
 
-        udp.beginPacket(CoAP_Host, CoAP_Port);
-        ip = udp.remoteIP();
-        CoapMessage.get(ip, CoAP_Port, cp, "data/get");
-        cp.SetQueryString("test1=adlajsdljalsd&test3=adlajsdljalsd123123");
-        len = cp.ToArray(buffer);
+        // udp.beginPacket(CoAP_Host, CoAP_Port);
+        // ip = udp.remoteIP();
+        // CoapMessage.ping(ip, CoAP_Port, cp);
+        // len = cp.ToArray(buffer);
+        // Serial.printf("Send CoAP message, Code: %d\t MsgID: %d\r\n", cp.code, cp.messageid);
+        // udp.write(buffer, len);
+        // udp.endPacket();
+        CoapPacket cp;
+
+        CoapMessage.get(CoAP_Host, CoAP_Port, cp, "data/get");
+        cp.SetQueryString("id=71747859");
+        cp.SetQueryString("hash=ecd71870d1963316a97e3ac3408c9835ad8cf0f3c1bc703527c30265534f75ae");
+        cp.SetQueryString("hash2=ecd71870d1963316a97e3ac3408c9835ad8cf0f3c1bc703527c30265534f75ae");
         Serial.printf("Send CoAP message, Code: %d\t MsgID: %d\r\n", cp.code, cp.messageid);
-        udp.write(buffer, len);
-        udp.endPacket();
+        udp_send(CoAP_Host, CoAP_Port, cp);
+
+        CoapMessage.ping(CoAP_Host, CoAP_Port, cp);
+        Serial.printf("Send CoAP message, Code: %d\t MsgID: %d\r\n", cp.code, cp.messageid);
+        udp_send(CoAP_Host, CoAP_Port, cp);
     }
     delay(5000);
 }
