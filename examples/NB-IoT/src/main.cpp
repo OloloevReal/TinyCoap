@@ -59,6 +59,7 @@ void setup(){
     ledcWrite(ledChannel, 3000);
     modemOpen();
 
+
     Serial.println(F("Starting SIM7020E modem, init connection"));
     tinyCoap.begin(modem, NULL, NULL, NULL, host);
     Serial.print(F("[MODEM] IMEI: "));
@@ -69,6 +70,8 @@ void setup(){
     Serial.println(modem.isGprsConnected());
     Serial.print(F("[MODEM] IP: "));
     Serial.println(modem.localIP().toString().c_str());
+
+    
 }
 
 void loop(){
@@ -81,6 +84,10 @@ void loop(){
                 ,\"af\":\"JLjsl\" \
                 }";
 
-    Serial.printf("Send message: %s\r\n", tinyCoap.post("data", (char*)s.c_str(), s.length(), COAP_CONTENT_TYPE::COAP_APPLICATION_JSON)?"Success":"Failed");
+    tinyCoap.setWaitResponse(true);
+    Serial.printf("Send message: %s\r\n", tinyCoap.get("data")?"Success":"Failed");
+    tinyCoap.setWaitResponse(false);
+    Serial.printf("Send message: %s\r\n", tinyCoap.get("data", "id=71747859&hash=ecd71870d1963316a97e3ac3408c9835ad8cf0f3c1bc703527c30265534f75ae")?"Success":"Failed");
+    Serial.printf("Send message: %s\r\n", tinyCoap.post("data", (char*)s.c_str(), s.length(), "id=71747859&hash=ecd71870d1963316a97e3ac3408c9835ad8cf0f3c1bc703527c30265534f75ae", COAP_CONTENT_TYPE::COAP_APPLICATION_JSON)?"Success":"Failed");
     delay(5000);
 }
