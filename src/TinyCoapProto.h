@@ -7,7 +7,7 @@
 #define COAP_OPTION_HEADER_SIZE 1
 #define COAP_PAYLOAD_MARKER     0xFF
 #define MAX_OPTION_NUM          10
-#define BUF_MAX_SIZE            250
+#define BUF_MAX_SIZE            512
 #define COAP_DEFAULT_PORT       5683
 
 #define RESPONSE_CODE(class, detail) ((class << 5) | (detail))

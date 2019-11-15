@@ -8,7 +8,7 @@
 #include <TinyGsmClient.h>
 
 #ifndef COAP_TIMEOUT_MS
-#define COAP_TIMEOUT_MS     3000UL
+#define COAP_TIMEOUT_MS     6000UL
 #endif
 #define COAP_RECEIVE_BUFFER 512
 
@@ -16,7 +16,7 @@
 class TinyCoap {
 public:
     TinyCoap()
-        :modem(NULL){}
+        :modem(NULL), usedWaitResponse(true){}
 
     void begin(TinyGsm&    gsm,
             const char* apn,
@@ -41,8 +41,11 @@ public:
     }
 
     bool get(const char *url);
+    bool get(const char *url, const char *query);
     bool post(const char *url, char *payload, int payloadlen, COAP_CONTENT_TYPE payloadtype = COAP_CONTENT_TYPE::COAP_NONE);
+    bool post(const char *url, char *payload, int payloadlen, const char *query, COAP_CONTENT_TYPE payloadtype = COAP_CONTENT_TYPE::COAP_NONE);
     bool ping();
+    void setWaitResponse(bool state);
 
 private:
     bool connectNetwork(const char* apn, const char* user, const char* pass);
@@ -61,7 +64,12 @@ private:
     Coap                coapMsg;
     CoapPacket          cp;
     uint8_t             Buffer[COAP_RECEIVE_BUFFER];
+    bool                usedWaitResponse;
 };
+
+void TinyCoap::setWaitResponse(bool state){
+    this->usedWaitResponse = state;
+}
 
 bool TinyCoap::connectNetwork(const char* apn, const char* user, const char* pass){
     DBG(F("Modem init ..."));
@@ -111,9 +119,16 @@ void TinyCoap::config(TinyGsm&    gsm,
 }
 
 bool TinyCoap::get(const char *url){
-    this->coapMsg.get(this->ip, this->port, this->cp,  url);
+    return get(url, NULL);
+}
+
+bool TinyCoap::get(const char *url, const char *query){
+    this->coapMsg.get(this->ip.toString().c_str(), this->port, this->cp,  url);
+    if(query != NULL){
+        this->cp.SetQueryString(query);
+    }
     if(client.write(this->cp.ToHexString().c_str()) > 0){
-        return waitResponce(this->cp.messageid);
+        return this->usedWaitResponse? waitResponce(this->cp.messageid):false;
     }else{
         DBG(F("Write message failed"));
     }
@@ -121,9 +136,16 @@ bool TinyCoap::get(const char *url){
 }
 
 bool TinyCoap::post(const char *url, char *payload, int payloadlen, COAP_CONTENT_TYPE payloadtype){
-    this->coapMsg.post(this->ip, this->port, this->cp, url, payload, payloadlen, payloadtype);
+    return post(url, payload, payloadlen, NULL, payloadtype);
+}
+
+bool TinyCoap::post(const char *url, char *payload, int payloadlen, const char *query, COAP_CONTENT_TYPE payloadtype){
+    this->coapMsg.post(this->ip.toString().c_str(), this->port, this->cp, url, payload, payloadlen, payloadtype);
+    if(query != NULL){
+        this->cp.SetQueryString(query);
+    }
     if(client.write(this->cp.ToHexString().c_str()) > 0){
-        return waitResponce(this->cp.messageid);
+        return this->usedWaitResponse? waitResponce(this->cp.messageid):false;
     }else{
         DBG(F("Write message failed"));
     }
@@ -131,7 +153,7 @@ bool TinyCoap::post(const char *url, char *payload, int payloadlen, COAP_CONTENT
 }
 
 bool TinyCoap::ping(){
-    this->coapMsg.ping(this->ip, this->port, this->cp);
+    this->coapMsg.ping(this->ip.toString().c_str(), this->port, this->cp);
     if(client.write(this->cp.ToHexString().c_str()) > 0){
         return waitResponce();
     }else{
