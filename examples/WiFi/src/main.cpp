@@ -12,10 +12,11 @@
 Coap CoapMessage;
 WiFiUDP udp;
 
+
 char ssid[] = "YOUR WIFI SSID";
 char pass[] = "YOUR WIFI PASS";
 
-char CoAP_Host[] = "YOUR COAP SERVER";
+char CoAP_Host[] = "YOUR COAP SERVER"; //"coap.me"
 uint16_t CoAP_Port = 5683;
 
 void connect_wl(){
@@ -67,31 +68,52 @@ int8_t udp_send(const char *host, uint16_t port, CoapPacket &Packet){
     return udp.endPacket();
 }
 
-void udp_receive(){
+bool udp_receive(CoapPacket &cp, unsigned long udp_timeout_ms = 2000UL){   
+    bool received = false;
+    int receivedLen = -1;
+    unsigned long started = millis();
+    while(!received && (millis() - started) < udp_timeout_ms){
+        int packetLen = udp.parsePacket();
+        if (packetLen > 0){
+            receivedLen = udp.read(buffer, packetLen >= BUF_MAX_SIZE?BUF_MAX_SIZE:packetLen);
+            received = true;
+        }
+    }
+
+    if(received&&receivedLen > 0){
+        return CoapMessage.parsePackets(buffer, receivedLen, cp);
+    }
+    return false;
 }
 
 void loop(){
     if(status_wl() == wl_status_t::WL_CONNECTED){    
-
-        // udp.beginPacket(CoAP_Host, CoAP_Port);
-        // ip = udp.remoteIP();
-        // CoapMessage.ping(ip, CoAP_Port, cp);
-        // len = cp.ToArray(buffer);
-        // Serial.printf("Send CoAP message, Code: %d\t MsgID: %d\r\n", cp.code, cp.messageid);
-        // udp.write(buffer, len);
-        // udp.endPacket();
         CoapPacket cp;
+        String s = "{\"n\":\"temp\" \
+            ,\"d\":21.5 \
+            ,\"ac\":\"JLjsl\" \
+            ,\"ab\":\"JLjsl\" \
+            ,\"ad\":\"JLjsl\" \
+            ,\"ae\":\"JLjsl\" \
+            ,\"af\":\"JLjsl\" \
+            }";
 
-        CoapMessage.get(CoAP_Host, CoAP_Port, cp, "data/get");
+        //CoapMessage.get(CoAP_Host, CoAP_Port, cp, "test");
+        CoapMessage.post(CoAP_Host, CoAP_Port, cp, "test", (char*)s.c_str(), s.length(), COAP_CONTENT_TYPE::COAP_APPLICATION_JSON);
         cp.SetQueryString("id=71747859");
         cp.SetQueryString("hash=ecd71870d1963316a97e3ac3408c9835ad8cf0f3c1bc703527c30265534f75ae");
-        cp.SetQueryString("hash2=ecd71870d1963316a97e3ac3408c9835ad8cf0f3c1bc703527c30265534f75ae");
         Serial.printf("Send CoAP message, Code: %d\t MsgID: %d\r\n", cp.code, cp.messageid);
         udp_send(CoAP_Host, CoAP_Port, cp);
 
-        CoapMessage.ping(CoAP_Host, CoAP_Port, cp);
-        Serial.printf("Send CoAP message, Code: %d\t MsgID: %d\r\n", cp.code, cp.messageid);
-        udp_send(CoAP_Host, CoAP_Port, cp);
+        if(udp_receive(cp)){
+            Serial.printf("Received CoAP message, Code: %d\t MsgID: %d\r\n", cp.code, cp.messageid);
+        }else{
+            Serial.println("Parse received data failed!");
+        }
+
+        // CoapMessage.ping(CoAP_Host, CoAP_Port, cp);
+        // Serial.printf("Send CoAP message, Code: %d\t MsgID: %d\r\n", cp.code, cp.messageid);
+        // udp_send(CoAP_Host, CoAP_Port, cp);
     }
     delay(5000);
 }
