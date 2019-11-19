@@ -7,7 +7,7 @@
 #define COAP_OPTION_HEADER_SIZE 1
 #define COAP_PAYLOAD_MARKER     0xFF
 #define MAX_OPTION_NUM          10
-#define BUF_MAX_SIZE            512
+#define BUF_MAX_SIZE            1024
 #define COAP_DEFAULT_PORT       5683
 
 #define RESPONSE_CODE(class, detail) ((class << 5) | (detail))
@@ -112,7 +112,7 @@ public:
     uint8_t *token;
     uint8_t tokenlen;
     uint8_t *payload;
-    uint8_t payloadlen;
+    uint16_t payloadlen;
     uint16_t messageid;
     
     uint8_t optionnum;
@@ -256,7 +256,6 @@ int CoapPacket::ToArray(uint8_t *buffer){
         packetSize += options[i].length + 1;
         running_delta = options[i].number;
     }
-
     // make payload
     if (payloadlen > 0) {
         if ((packetSize + 1 + payloadlen) >= BUF_MAX_SIZE) {
