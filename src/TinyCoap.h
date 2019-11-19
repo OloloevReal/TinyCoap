@@ -18,26 +18,35 @@ public:
     TinyCoap()
         :modem(NULL), usedWaitResponse(true){}
 
-    void begin(TinyGsm&    gsm,
+    bool begin(TinyGsm&    gsm,
             const char* apn,
             const char* user,
             const char* pass,
             const char* domain,
             uint16_t    port   = COAP_DEFAULT_PORT){
 
+        bool state = false;
         config(gsm, domain, port);
         unsigned long started = millis();
-        while(connectNetwork(apn, user, pass) != true && 
+        while(!state && 
             (millis() - started < COAP_TIMEOUT_MS * 40)){
-            DBG(F("Modem restarting ..."));
-            modem->restart();        
+            state = connectNetwork(apn, user, pass);
+            if (!state){
+                DBG(F("Modem restarting ..."));
+                modem->restart();        
+            }
         }
 
+        if (!state) return false;
+
+        state = false;
         started = millis();
-        while(client.connect(ip.toString().c_str(), port, 10) != true && 
+        while(!state && 
             (millis() - started < COAP_TIMEOUT_MS * 10)){      
+            state = client.connect(ip.toString().c_str(), port, 10);
         }
-                
+
+        return state;
     }
 
     bool get(const char *url);
