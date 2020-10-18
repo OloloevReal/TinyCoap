@@ -1,0 +1,23 @@
+{
+  "name": "TinyCoap",
+  "version": "0.0.1",
+  "description": "A small Arduino library for using COAP protocol",
+  "keywords": "GSM, AT commands, AT, COAP, NB-IoT, SIM7020E, SIMCOM, WIFI",
+  "authors":
+  [
+    {
+      "name":  "Ololoev",
+      "url":   "https://github.com/OloloevReal",
+      "maintainer": true
+    }
+  ],
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/OloloevReal/TinyCoap.git"
+  },
+  "homepage": "https://github.com/OloloevReal/TinyCoap",
+  "frameworks": [ "arduino" ],
+  "platforms": "*",
+  "examples": "examples/*/src/main.cpp"
+}
